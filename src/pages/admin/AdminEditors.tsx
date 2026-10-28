@@ -15,6 +15,10 @@ import {
   ShoppingBag,
   Boxes,
   BarChart3,
+  Crown,
+  KeyRound,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
@@ -59,11 +63,18 @@ const PERMISSION_CONFIG: {
 ];
 
 export const AdminEditors: React.FC = () => {
-  const { isSuperAdmin } = useAuth();
+  const { user, isSuperAdmin } = useAuth();
   const [editors, setEditors] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEditor, setEditingEditor] = useState<UserProfile | null>(null);
+
+  // Super Admin Change / Transfer State
+  const [isSuperAdminModalOpen, setIsSuperAdminModalOpen] = useState(false);
+  const [superAdminName, setSuperAdminName] = useState(user?.full_name || 'Minora Super Admin');
+  const [superAdminEmail, setSuperAdminEmail] = useState(user?.email || 'admin@minora.com');
+  const [superAdminPhone, setSuperAdminPhone] = useState(user?.phone || '+880 1838 384488');
+  const [copiedSql, setCopiedSql] = useState(false);
 
   // Form states
   const [fullName, setFullName] = useState('');
@@ -89,6 +100,35 @@ export const AdminEditors: React.FC = () => {
   useEffect(() => {
     fetchEditors();
   }, []);
+
+  const handleSaveSuperAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!superAdminEmail.trim() || !superAdminName.trim()) {
+      setErrorMessage('Super Admin name and email are required.');
+      return;
+    }
+
+    const res = await authService.updateSuperAdmin({
+      full_name: superAdminName.trim(),
+      email: superAdminEmail.trim(),
+      phone: superAdminPhone.trim(),
+    });
+
+    if (res.success) {
+      setSuccessMessage(`Super Admin credentials updated to ${superAdminEmail}. Changes saved!`);
+      setTimeout(() => setSuccessMessage(null), 3500);
+      setIsSuperAdminModalOpen(false);
+    } else {
+      setErrorMessage(res.error || 'Failed to update Super Admin.');
+    }
+  };
+
+  const handleCopySql = () => {
+    const sql = `SELECT public.assign_admin_role('${superAdminEmail}');`;
+    navigator.clipboard.writeText(sql);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2000);
+  };
 
   if (!isSuperAdmin) {
     return (
@@ -234,6 +274,68 @@ export const AdminEditors: React.FC = () => {
           <span className="font-bold">{errorMessage}</span>
         </div>
       )}
+
+      {/* Primary Super Administrator Profile Card */}
+      <div className="bg-gradient-to-r from-chocolate to-chocolate-light text-cream rounded-3xl p-6 sm:p-7 border border-amber/30 shadow-warm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-amber text-chocolate flex items-center justify-center font-serif font-black text-2xl shadow-md border border-amber/40">
+              <Crown className="w-8 h-8 text-chocolate" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-xl font-serif font-bold text-cream">
+                  {user?.full_name || 'Minora Super Admin'}
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber text-chocolate">
+                  Primary Super Admin
+                </span>
+              </div>
+              <p className="text-xs text-honey/90 mt-0.5 font-mono">{user?.email || 'admin@minora.com'}</p>
+              <p className="text-[11px] text-cream/60 mt-0.5">
+                Master Ownership • Full Store Authority • Staff Permission Controller
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSuperAdminName(user?.full_name || 'Minora Super Admin');
+                setSuperAdminEmail(user?.email || 'admin@minora.com');
+                setSuperAdminPhone(user?.phone || '+880 1838 384488');
+                setIsSuperAdminModalOpen(true);
+              }}
+              className="px-4 py-2 bg-amber hover:bg-honey text-chocolate font-bold rounded-xl text-xs flex items-center gap-2 transition-all shadow-xs cursor-pointer"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Change / Transfer Super Admin</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Automatic Cloud Transfer Command Note */}
+        <div className="p-3 bg-black/25 rounded-2xl border border-amber/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-honey flex-shrink-0" />
+            <span className="text-cream/90 text-[11px]">
+              <strong>Automatic Database Command:</strong> Run this in Supabase SQL editor to assign Super Admin role to any registered email:
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <code className="px-2 py-1 bg-black/40 rounded-lg text-honey font-mono text-[11px] border border-amber/20">
+              SELECT public.assign_admin_role('{user?.email || 'your@email.com'}');
+            </code>
+            <button
+              onClick={handleCopySql}
+              className="p-1.5 bg-amber/20 hover:bg-amber/30 text-honey rounded-lg transition-colors cursor-pointer"
+              title="Copy SQL command"
+            >
+              {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Info Notice */}
       <div className="p-4 bg-amber/10 border border-amber/30 rounded-2xl flex items-start gap-3">
@@ -493,6 +595,101 @@ export const AdminEditors: React.FC = () => {
                   className="px-5 py-2 bg-chocolate text-honey font-bold rounded-xl shadow-xs hover:bg-chocolate-light cursor-pointer"
                 >
                   {editingEditor ? 'Save Authorities' : 'Create Editor Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Change / Transfer Super Admin Modal */}
+      {isSuperAdminModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-chocolate-deep/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl max-w-md w-full border border-amber/30 shadow-2xl p-6 sm:p-8 space-y-6">
+            <div className="flex items-center justify-between pb-4 border-b border-amber/15">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber/20 text-chocolate flex items-center justify-center font-bold">
+                  <Crown className="w-5 h-5 text-amber" />
+                </div>
+                <div>
+                  <h3 className="font-serif text-lg font-bold text-chocolate">
+                    Super Admin Profile & Ownership
+                  </h3>
+                  <p className="text-[11px] text-chocolate/60">
+                    Change primary Super Administrator credentials
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSuperAdminModalOpen(false)}
+                className="p-2 text-chocolate/60 hover:text-chocolate rounded-full hover:bg-cream"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSuperAdmin} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-chocolate mb-1">Super Admin Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={superAdminName}
+                  onChange={(e) => setSuperAdminName(e.target.value)}
+                  placeholder="e.g. Minora Super Admin"
+                  className="w-full px-3 py-2 bg-cream-50 border border-amber/20 rounded-xl font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-chocolate mb-1">Super Admin Email Address</label>
+                <input
+                  type="email"
+                  required
+                  value={superAdminEmail}
+                  onChange={(e) => setSuperAdminEmail(e.target.value)}
+                  placeholder="admin@minora.com"
+                  className="w-full px-3 py-2 bg-cream-50 border border-amber/20 rounded-xl font-mono font-medium"
+                />
+                <p className="text-[10px] text-chocolate/60 mt-1">
+                  This email will be granted full root privileges and master control over all editors and settings.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-chocolate mb-1">Contact Phone</label>
+                <input
+                  type="tel"
+                  value={superAdminPhone}
+                  onChange={(e) => setSuperAdminPhone(e.target.value)}
+                  placeholder="+880 1XXXXXXXXX"
+                  className="w-full px-3 py-2 bg-cream-50 border border-amber/20 rounded-xl font-mono"
+                />
+              </div>
+
+              <div className="p-3 bg-amber/10 border border-amber/20 rounded-xl text-[11px] text-chocolate/80 space-y-1">
+                <strong>💡 Automatic Database Role Assignment:</strong>
+                <p>
+                  To sync this email as admin in Supabase PostgreSQL, make sure to execute:
+                </p>
+                <code className="block p-1.5 bg-black/10 rounded font-mono text-[10px] text-chocolate">
+                  SELECT public.assign_admin_role('{superAdminEmail}');
+                </code>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-amber/15">
+                <button
+                  type="button"
+                  onClick={() => setIsSuperAdminModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 rounded-xl font-semibold text-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-chocolate text-honey font-bold rounded-xl shadow-xs hover:bg-chocolate-light cursor-pointer flex items-center gap-1.5"
+                >
+                  <ShieldCheck className="w-4 h-4 text-honey" />
+                  <span>Update Super Admin</span>
                 </button>
               </div>
             </form>

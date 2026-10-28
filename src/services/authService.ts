@@ -207,6 +207,56 @@ export const authService = {
     return users.filter((u) => u.role === 'editor');
   },
 
+  async updateSuperAdmin(data: {
+    full_name: string;
+    email: string;
+    phone?: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    const users = await this.getUsers();
+    const cleanEmail = data.email.toLowerCase().trim();
+
+    let superAdmin = users.find((u) => u.role === 'superadmin' || u.id === 'user-admin-1');
+    if (!superAdmin) {
+      superAdmin = {
+        id: 'user-admin-1',
+        email: cleanEmail,
+        full_name: data.full_name.trim(),
+        phone: data.phone?.trim() || '',
+        role: 'superadmin',
+        status: 'active',
+        permissions: ['manage_products', 'manage_categories', 'manage_orders', 'manage_inventory', 'view_reports'],
+        created_at: new Date().toISOString(),
+      };
+      users.unshift(superAdmin);
+    } else {
+      superAdmin.email = cleanEmail;
+      superAdmin.full_name = data.full_name.trim();
+      superAdmin.phone = data.phone?.trim() || '';
+      superAdmin.updated_at = new Date().toISOString();
+    }
+
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(superAdmin));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            email: cleanEmail,
+            full_name: superAdmin.full_name,
+            phone: superAdmin.phone,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', superAdmin.id);
+      } catch (e) {
+        console.warn('Supabase update super admin exception', e);
+      }
+    }
+
+    return { success: true };
+  },
+
   async createEditor(data: {
     email: string;
     full_name: string;
