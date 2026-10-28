@@ -34,8 +34,10 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const updateSettings = async (newSettings: Partial<SiteSettings>) => {
     try {
-      const updated = await storeService.updateSiteSettings(newSettings);
-      setSettings(updated);
+      const res = await storeService.updateSiteSettings(newSettings);
+      if (res.data) {
+        setSettings(res.data);
+      }
     } catch (err) {
       console.error('Failed to update settings', err);
       throw err;
