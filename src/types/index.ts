@@ -16,8 +16,15 @@ export type PaymentStatus =
   | 'rejected'
   | 'refunded';
 
-export type UserRole = 'admin' | 'customer';
+export type UserRole = 'superadmin' | 'admin' | 'editor' | 'customer';
 export type UserStatus = 'active' | 'suspended';
+
+export type EditorPermission =
+  | 'manage_products'
+  | 'manage_categories'
+  | 'manage_orders'
+  | 'manage_inventory'
+  | 'view_reports';
 
 export interface UserProfile {
   id: string;
@@ -26,6 +33,7 @@ export interface UserProfile {
   phone?: string;
   role: UserRole;
   status: UserStatus;
+  permissions?: EditorPermission[];
   created_at: string;
   updated_at?: string;
 }

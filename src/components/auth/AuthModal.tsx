@@ -1,5 +1,15 @@
 import React, { useState } from 'react';
-import { X, Lock, Mail, User, Phone, CheckCircle, ShieldCheck } from 'lucide-react';
+import {
+  X,
+  Lock,
+  Mail,
+  User,
+  Phone,
+  CheckCircle,
+  ShieldCheck,
+  UserCheck,
+  ShoppingBag,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 interface AuthModalProps {
@@ -9,7 +19,13 @@ interface AuthModalProps {
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMode = 'login' }) => {
-  const { signIn, signUp, enableDemoAdmin } = useAuth();
+  const {
+    signIn,
+    signUp,
+    enableDemoSuperAdmin,
+    enableDemoEditor,
+    enableDemoCustomer,
+  } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>(defaultMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +47,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
       if (mode === 'login') {
         const res = await signIn(email, password);
         if (res.success) {
-          onClose();
+          setSuccessMsg('Signed in successfully!');
+          setTimeout(() => {
+            onClose();
+          }, 600);
         } else {
           setError(res.error || 'Login failed. Please check your credentials.');
         }
@@ -53,9 +72,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
     }
   };
 
-  const handleDemoAdmin = () => {
-    enableDemoAdmin();
-    onClose();
+  const handleQuickLogin = (role: 'superadmin' | 'editor' | 'customer') => {
+    if (role === 'superadmin') {
+      enableDemoSuperAdmin();
+      setSuccessMsg('Signed in as Super Administrator (Full Authority)');
+    } else if (role === 'editor') {
+      enableDemoEditor();
+      setSuccessMsg('Signed in as Editor (Product & Catalog Management)');
+    } else {
+      enableDemoCustomer();
+      setSuccessMsg('Signed in as Customer (Shopping & Cart)');
+    }
+    setTimeout(() => {
+      onClose();
+    }, 700);
   };
 
   return (
@@ -65,7 +95,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
         <div className="bg-chocolate p-6 text-white text-center relative">
           <button
             onClick={onClose}
-            className="absolute top-4 right-4 text-cream/70 hover:text-white transition-colors"
+            className="absolute top-4 right-4 text-cream/70 hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -77,16 +107,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
           <h3 className="text-xl font-serif font-bold text-cream">
             {mode === 'login' ? 'Welcome Back to MINORA' : 'Create Your Customer Account'}
           </h3>
-          <p className="text-xs text-honey/90 mt-1 font-sans">Pure • Natural • Healthy</p>
+          <p className="text-xs text-honey/90 mt-1 font-sans">
+            Unified Portal: Super Admin • Editor • Customer
+          </p>
         </div>
 
         {/* Tab switch */}
         <div className="flex border-b border-amber/10 bg-cream/40">
           <button
             onClick={() => { setMode('login'); setError(null); }}
-            className={`flex-1 py-3 text-sm font-semibold transition-all ${
+            className={`flex-1 py-3 text-sm font-semibold transition-all cursor-pointer ${
               mode === 'login'
-                ? 'text-chocolate border-b-2 border-amber bg-white'
+                ? 'text-chocolate border-b-2 border-amber bg-white font-bold'
                 : 'text-chocolate/60 hover:text-chocolate'
             }`}
           >
@@ -94,27 +126,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
           </button>
           <button
             onClick={() => { setMode('register'); setError(null); }}
-            className={`flex-1 py-3 text-sm font-semibold transition-all ${
+            className={`flex-1 py-3 text-sm font-semibold transition-all cursor-pointer ${
               mode === 'register'
-                ? 'text-chocolate border-b-2 border-amber bg-white'
+                ? 'text-chocolate border-b-2 border-amber bg-white font-bold'
                 : 'text-chocolate/60 hover:text-chocolate'
             }`}
           >
-            Create Account
+            Create Customer Account
           </button>
         </div>
 
         <div className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-lg animate-fadeIn">
               {error}
             </div>
           )}
 
           {successMsg && (
-            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg flex items-center gap-2">
+            <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs rounded-lg flex items-center gap-2 animate-fadeIn">
               <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-              <span>{successMsg}</span>
+              <span className="font-semibold">{successMsg}</span>
             </div>
           )}
 
@@ -144,7 +176,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
                       type="tel"
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. 01838838488"
+                      placeholder="e.g. 018XXXXXXXX"
                       className="w-full pl-9 pr-3 py-2 bg-white border border-amber/20 rounded-lg text-sm text-chocolate focus:outline-none focus:ring-2 focus:ring-amber/50"
                     />
                   </div>
@@ -185,7 +217,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-chocolate hover:bg-chocolate-light text-honey font-bold rounded-lg transition-all shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-50"
+              className="w-full py-2.5 bg-chocolate hover:bg-chocolate-light text-honey font-bold rounded-lg transition-all shadow-md flex items-center justify-center gap-2 mt-2 disabled:opacity-50 cursor-pointer"
             >
               {loading ? (
                 <span className="inline-block animate-spin rounded-full h-4 w-4 border-2 border-honey border-t-transparent" />
@@ -197,16 +229,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, defaultMo
             </button>
           </form>
 
-          {/* Quick Demo Admin Access */}
-          <div className="mt-6 pt-4 border-t border-amber/20 text-center">
-            <p className="text-xs text-chocolate/70 mb-2">Evaluating as Administrator?</p>
-            <button
-              onClick={handleDemoAdmin}
-              className="w-full py-2 bg-cream hover:bg-cream-300 text-chocolate border border-amber/40 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <ShieldCheck className="w-4 h-4 text-amber" />
-              Quick One-Click Admin Access (Demo Mode)
-            </button>
+          {/* Quick One-Click Switcher for All 3 Roles */}
+          <div className="mt-6 pt-4 border-t border-amber/20">
+            <p className="text-[11px] font-bold text-chocolate uppercase tracking-wider text-center mb-2.5">
+              Quick Sign In as:
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('superadmin')}
+                className="p-2 bg-cream hover:bg-cream-300 text-chocolate border border-amber/40 rounded-xl text-center transition-all hover:scale-[1.02] cursor-pointer"
+                title="Super Admin has full authority over all settings and editor setup"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber mx-auto mb-1" />
+                <span className="block text-[11px] font-bold text-chocolate leading-tight">Super Admin</span>
+                <span className="block text-[9px] text-chocolate/60">Full Control</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('editor')}
+                className="p-2 bg-cream hover:bg-cream-300 text-chocolate border border-amber/40 rounded-xl text-center transition-all hover:scale-[1.02] cursor-pointer"
+                title="Editor can work on products, categories, stock, and orders"
+              >
+                <UserCheck className="w-4 h-4 text-emerald-600 mx-auto mb-1" />
+                <span className="block text-[11px] font-bold text-chocolate leading-tight">Editor</span>
+                <span className="block text-[9px] text-chocolate/60">Catalog & Stock</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleQuickLogin('customer')}
+                className="p-2 bg-cream hover:bg-cream-300 text-chocolate border border-amber/40 rounded-xl text-center transition-all hover:scale-[1.02] cursor-pointer"
+                title="Customer can browse, add to cart, and purchase products"
+              >
+                <ShoppingBag className="w-4 h-4 text-chocolate mx-auto mb-1" />
+                <span className="block text-[11px] font-bold text-chocolate leading-tight">Customer</span>
+                <span className="block text-[9px] text-chocolate/60">Shop & Cart</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

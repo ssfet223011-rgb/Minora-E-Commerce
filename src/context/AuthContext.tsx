@@ -1,15 +1,23 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserProfile } from '../types';
+import { UserProfile, EditorPermission } from '../types';
 import { authService } from '../services/authService';
 
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
   isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isEditor: boolean;
+  isStaff: boolean;
+  isCustomer: boolean;
+  hasPermission: (permission: EditorPermission) => boolean;
   signIn: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password?: string, fullName?: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   enableDemoAdmin: () => void;
+  enableDemoSuperAdmin: () => void;
+  enableDemoEditor: () => void;
+  enableDemoCustomer: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,12 +67,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
   };
 
-  const enableDemoAdmin = () => {
-    const admin = authService.setDemoAdmin();
+  const enableDemoSuperAdmin = () => {
+    const admin = authService.setDemoSuperAdmin();
     setUser(admin);
   };
 
-  const isAdmin = Boolean(user && user.role === 'admin' && user.status === 'active');
+  const enableDemoEditor = () => {
+    const editor = authService.setDemoEditor();
+    setUser(editor);
+  };
+
+  const enableDemoCustomer = () => {
+    const customer = authService.setDemoCustomer();
+    setUser(customer);
+  };
+
+  const enableDemoAdmin = enableDemoSuperAdmin;
+
+  const isSuperAdmin = Boolean(
+    user && (user.role === 'superadmin' || user.role === 'admin') && user.status === 'active'
+  );
+  const isEditor = Boolean(user && user.role === 'editor' && user.status === 'active');
+  const isStaff = isSuperAdmin || isEditor;
+  const isAdmin = isSuperAdmin;
+  const isCustomer = Boolean(user && user.role === 'customer');
+
+  const hasPermission = (permission: EditorPermission): boolean => {
+    if (!user || user.status !== 'active') return false;
+    if (isSuperAdmin) return true; // Superadmin has all authorities
+    if (isEditor) {
+      // If editor has explicit permissions array, check it; otherwise default allow basic product/category work
+      if (user.permissions && Array.isArray(user.permissions)) {
+        return user.permissions.includes(permission);
+      }
+      return ['manage_products', 'manage_categories', 'manage_inventory'].includes(permission);
+    }
+    return false;
+  };
 
   return (
     <AuthContext.Provider
@@ -72,10 +111,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         loading,
         isAdmin,
+        isSuperAdmin,
+        isEditor,
+        isStaff,
+        isCustomer,
+        hasPermission,
         signIn,
         signUp,
         signOut,
         enableDemoAdmin,
+        enableDemoSuperAdmin,
+        enableDemoEditor,
+        enableDemoCustomer,
       }}
     >
       {children}

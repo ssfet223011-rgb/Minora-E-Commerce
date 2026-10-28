@@ -68,8 +68,11 @@ export const authService = {
         id: 'usr_' + Date.now(),
         email: cleanEmail,
         full_name: cleanEmail.split('@')[0],
-        role: cleanEmail.includes('admin') ? 'admin' : 'customer',
+        role: cleanEmail.includes('admin') ? 'superadmin' : cleanEmail.includes('editor') ? 'editor' : 'customer',
         status: 'active',
+        permissions: cleanEmail.includes('editor')
+          ? ['manage_products', 'manage_categories', 'manage_inventory']
+          : undefined,
         created_at: new Date().toISOString(),
       };
       users.push(user);
@@ -198,18 +201,161 @@ export const authService = {
     return true;
   },
 
-  // Helper for quick demo/testing
-  setDemoAdmin(): UserProfile {
+  // EDITORS MANAGEMENT (Super Admin authority only)
+  async getEditors(): Promise<UserProfile[]> {
+    const users = await this.getUsers();
+    return users.filter((u) => u.role === 'editor');
+  },
+
+  async createEditor(data: {
+    email: string;
+    full_name: string;
+    phone?: string;
+    permissions: string[];
+  }): Promise<{ success: boolean; editor?: UserProfile; error?: string }> {
+    const cleanEmail = data.email.toLowerCase().trim();
+    const users = await this.getUsers();
+
+    if (users.some((u) => u.email.toLowerCase() === cleanEmail)) {
+      return { success: false, error: 'A staff or customer account with this email already exists.' };
+    }
+
+    const newEditor: UserProfile = {
+      id: 'ed_' + Date.now(),
+      email: cleanEmail,
+      full_name: data.full_name.trim(),
+      phone: data.phone?.trim() || '',
+      role: 'editor',
+      status: 'active',
+      permissions: (data.permissions as any) || ['manage_products', 'manage_categories', 'manage_inventory'],
+      created_at: new Date().toISOString(),
+    };
+
+    users.unshift(newEditor);
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').insert({
+          id: newEditor.id,
+          email: newEditor.email,
+          full_name: newEditor.full_name,
+          phone: newEditor.phone,
+          role: 'editor',
+          status: 'active',
+        });
+      } catch (e) {
+        console.warn('Supabase create editor exception', e);
+      }
+    }
+
+    return { success: true, editor: newEditor };
+  },
+
+  async updateEditor(
+    editorId: string,
+    updates: Partial<UserProfile>
+  ): Promise<{ success: boolean; editor?: UserProfile; error?: string }> {
+    const users = await this.getUsers();
+    const idx = users.findIndex((u) => u.id === editorId);
+    if (idx === -1) return { success: false, error: 'Editor not found.' };
+
+    const updated = {
+      ...users[idx],
+      ...updates,
+      updated_at: new Date().toISOString(),
+    };
+    users[idx] = updated;
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+
+    // If current logged in user is this editor, sync their session
+    const current = await this.getCurrentUser();
+    if (current?.id === editorId) {
+      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updated));
+    }
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            full_name: updated.full_name,
+            phone: updated.phone,
+            status: updated.status,
+            role: updated.role,
+          })
+          .eq('id', editorId);
+      } catch (e) {
+        console.warn('Supabase update editor exception', e);
+      }
+    }
+
+    return { success: true, editor: updated };
+  },
+
+  async deleteEditor(editorId: string): Promise<boolean> {
+    const users = await this.getUsers();
+    const filtered = users.filter((u) => u.id !== editorId);
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(filtered));
+
+    if (isSupabaseConfigured) {
+      try {
+        await supabase.from('profiles').delete().eq('id', editorId);
+      } catch (e) {
+        console.warn('Supabase delete editor exception', e);
+      }
+    }
+
+    return true;
+  },
+
+  // Helpers for quick demo/testing
+  setDemoSuperAdmin(): UserProfile {
     const adminUser: UserProfile = {
       id: 'user-admin-1',
       email: 'admin@minora.com',
       full_name: 'Minora Super Admin',
       phone: '+880 1838 384488',
-      role: 'admin',
+      role: 'superadmin',
       status: 'active',
+      permissions: ['manage_products', 'manage_categories', 'manage_orders', 'manage_inventory', 'view_reports'],
       created_at: new Date().toISOString(),
     };
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(adminUser));
     return adminUser;
+  },
+
+  setDemoEditor(): UserProfile {
+    const editorUser: UserProfile = {
+      id: 'user-editor-1',
+      email: 'editor@minora.com',
+      full_name: 'Minora Catalog Editor',
+      phone: '+880 1812 345678',
+      role: 'editor',
+      status: 'active',
+      permissions: ['manage_products', 'manage_categories', 'manage_inventory'],
+      created_at: new Date().toISOString(),
+    };
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(editorUser));
+    return editorUser;
+  },
+
+  setDemoCustomer(): UserProfile {
+    const customerUser: UserProfile = {
+      id: 'user-cust-1',
+      email: 'customer@minora.com',
+      full_name: 'Tanvir Hossain (Customer)',
+      phone: '01712345678',
+      role: 'customer',
+      status: 'active',
+      created_at: new Date().toISOString(),
+    };
+    localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(customerUser));
+    return customerUser;
+  },
+
+  // Backward compatibility alias
+  setDemoAdmin(): UserProfile {
+    return this.setDemoSuperAdmin();
   },
 };

@@ -11,7 +11,7 @@ import { FacebookIcon, InstagramIcon, YoutubeIcon, TwitterIcon } from '../common
 
 export const Header: React.FC = () => {
   const { itemCount, toggleCart } = useCart();
-  const { user, signOut, isAdmin } = useAuth();
+  const { user, signOut, isStaff, isSuperAdmin, isEditor } = useAuth();
   const { settings, formatPrice } = useSettings();
   const navigate = useNavigate();
 
@@ -157,26 +157,48 @@ export const Header: React.FC = () => {
               <div className="relative">
                 <button
                   onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                  className="flex items-center gap-1.5 text-xs font-semibold text-chocolate hover:text-amber py-1 px-2.5 rounded-full bg-cream/70 border border-amber/20 transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-semibold text-chocolate hover:text-amber py-1 px-2.5 rounded-full bg-cream/70 border border-amber/20 transition-colors cursor-pointer"
                 >
                   <User className="w-3.5 h-3.5 text-amber" />
-                  <span className="hidden sm:inline max-w-[100px] truncate">{user.full_name}</span>
+                  <span className="hidden sm:inline max-w-[110px] truncate">{user.full_name}</span>
+                  <span className={`hidden md:inline-block px-1.5 py-0.2 rounded text-[9px] font-bold ${
+                    isSuperAdmin
+                      ? 'bg-amber text-chocolate'
+                      : isEditor
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : 'bg-cream-300 text-chocolate/70'
+                  }`}>
+                    {isSuperAdmin ? 'Admin' : isEditor ? 'Editor' : 'Customer'}
+                  </span>
                 </button>
 
                 {isUserMenuOpen && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-warm-lg border border-amber/20 py-1.5 z-50">
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-xl shadow-warm-lg border border-amber/20 py-1.5 z-50 animate-fadeIn">
                     <div className="px-4 py-2 border-b border-amber/10">
                       <p className="text-xs font-bold text-chocolate truncate">{user.full_name}</p>
                       <p className="text-[11px] text-chocolate/60 truncate">{user.email}</p>
+                      <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        isSuperAdmin
+                          ? 'bg-amber/20 text-chocolate'
+                          : isEditor
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-cream text-chocolate/70'
+                      }`}>
+                        {isSuperAdmin
+                          ? '👑 Super Administrator'
+                          : isEditor
+                          ? '✍️ Catalog Editor'
+                          : '👤 Customer Account'}
+                      </span>
                     </div>
-                    {isAdmin && (
+                    {isStaff && (
                       <Link
                         to="/admin"
                         onClick={() => setIsUserMenuOpen(false)}
-                        className="px-4 py-2 text-xs text-chocolate hover:bg-cream flex items-center gap-2 font-medium"
+                        className="px-4 py-2 text-xs text-chocolate hover:bg-cream flex items-center gap-2 font-bold border-b border-amber/10"
                       >
                         <ShieldCheck className="w-3.5 h-3.5 text-amber" />
-                        Admin Dashboard
+                        <span>{isSuperAdmin ? 'Admin Dashboard' : 'Editor Workspace'}</span>
                       </Link>
                     )}
                     <button
@@ -184,7 +206,7 @@ export const Header: React.FC = () => {
                         signOut();
                         setIsUserMenuOpen(false);
                       }}
-                      className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
+                      className="w-full text-left px-4 py-2 text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium cursor-pointer"
                     >
                       <LogOut className="w-3.5 h-3.5" />
                       Sign Out
@@ -331,22 +353,22 @@ export const Header: React.FC = () => {
               </Link>
             </div>
 
-            {/* Quick admin access link */}
+            {/* Quick admin/editor access link */}
             <div className="py-1">
-              {isAdmin ? (
+              {isStaff ? (
                 <Link
                   to="/admin"
                   className="text-xs text-honey hover:text-cream flex items-center gap-1 font-semibold"
                 >
                   <ShieldCheck className="w-3.5 h-3.5" />
-                  Admin Panel
+                  <span>{isSuperAdmin ? 'Admin Panel' : 'Editor Workspace'}</span>
                 </Link>
               ) : (
                 <Link
                   to="/admin"
                   className="text-[11px] text-cream/60 hover:text-honey transition-colors"
                 >
-                  Admin Access
+                  Staff Portal
                 </Link>
               )}
             </div>
