@@ -22,6 +22,7 @@ export const AdminProducts: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -169,6 +170,8 @@ export const AdminProducts: React.FC = () => {
       alert('Error saving product: ' + (result.error || 'Unknown error'));
       return;
     }
+    setSuccessMessage(editingProduct ? `Product "${name}" updated successfully!` : `Product "${name}" created successfully!`);
+    setTimeout(() => setSuccessMessage(null), 3500);
     setIsModalOpen(false);
     await fetchAll();
   };
@@ -213,6 +216,13 @@ export const AdminProducts: React.FC = () => {
       </div>
 
       {/* Filter toolbar */}
+      {successMessage && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-2 animate-fadeIn shadow-xs">
+          <CheckCircle className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span className="font-bold">{successMessage}</span>
+        </div>
+      )}
+
       <div className="bg-white p-4 rounded-2xl border border-amber/20 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <input
@@ -268,16 +278,22 @@ export const AdminProducts: React.FC = () => {
                   const cat = categories.find((c) => c.id === p.category_id);
                   const varCount = p.variants?.length || 0;
                   return (
-                    <tr key={p.id} className="hover:bg-cream/20 transition-colors">
+                    <tr key={p.id} className="hover:bg-cream/40 transition-colors">
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
+                        <div
+                          onClick={() => openEditModal(p)}
+                          className="flex items-center gap-3 cursor-pointer group"
+                          title="Click to edit product details"
+                        >
                           <img
                             src={p.image_url}
                             alt=""
-                            className="w-10 h-10 rounded-lg object-cover border border-amber/15 flex-shrink-0"
+                            className="w-10 h-10 rounded-lg object-cover border border-amber/15 flex-shrink-0 group-hover:scale-105 transition-transform"
                           />
                           <div>
-                            <strong className="font-semibold text-chocolate block">{p.name}</strong>
+                            <strong className="font-semibold text-chocolate block group-hover:text-amber transition-colors">
+                              {p.name}
+                            </strong>
                             <span className="text-[10px] text-chocolate/60 truncate max-w-[180px] block">
                               {p.short_description}
                             </span>
@@ -322,17 +338,18 @@ export const AdminProducts: React.FC = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => openEditModal(p)}
-                            className="p-1.5 rounded-lg bg-cream hover:bg-cream-300 text-chocolate transition-colors border border-amber/20"
+                            className="px-2.5 py-1.5 rounded-lg bg-amber/10 hover:bg-amber/20 text-chocolate font-bold text-xs border border-amber/30 flex items-center gap-1.5 transition-colors cursor-pointer"
                             title="Edit Product & Variations"
                           >
                             <Edit className="w-3.5 h-3.5 text-amber" />
+                            <span>Edit Details</span>
                           </button>
                           <button
                             onClick={() => handleDeleteProduct(p.id)}
-                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors border border-red-200"
+                            className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors border border-red-200 cursor-pointer"
                             title="Delete Product"
                           >
                             <Trash2 className="w-3.5 h-3.5" />

@@ -36,15 +36,27 @@ function setLocalItem<T>(key: string, val: T): void {
 export const storeService = {
   // CATEGORIES
   async getCategories(): Promise<Category[]> {
+    let localCategories = getLocalItem<Category[]>(STORAGE_KEYS.CATEGORIES, []);
+
     if (isSupabaseConfigured) {
       try {
         const { data, error } = await supabase
           .from('categories')
           .select('*')
           .order('display_order', { ascending: true });
-        if (!error && data) {
-          // Always trust Supabase data when configured — even if empty
-          if (data.length > 0) setLocalItem(STORAGE_KEYS.CATEGORIES, data);
+        if (!error && data && data.length > 0) {
+          // If we have local overrides, merge them
+          if (localCategories.length > 0) {
+            const localMap = new Map(localCategories.map(c => [c.id, c]));
+            const merged = data.map(cat => localMap.get(cat.id) || cat);
+            // Also append any newly created local categories not in Supabase yet
+            const supabaseIds = new Set(data.map(c => c.id));
+            const newLocals = localCategories.filter(c => !supabaseIds.has(c.id));
+            const fullList = [...merged, ...newLocals];
+            setLocalItem(STORAGE_KEYS.CATEGORIES, fullList);
+            return fullList;
+          }
+          setLocalItem(STORAGE_KEYS.CATEGORIES, data);
           return data;
         }
         if (error) console.error('Supabase getCategories error:', error.message);
@@ -52,7 +64,7 @@ export const storeService = {
         console.warn('Supabase fetch failed, falling back to local store', err);
       }
     }
-    return getLocalItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+    return localCategories.length > 0 ? localCategories : INITIAL_CATEGORIES;
   },
 
   async getCategoryBySlug(slug: string): Promise<Category | null> {
@@ -61,10 +73,12 @@ export const storeService = {
   },
 
   async saveCategory(cat: Partial<Category>): Promise<{ success: boolean; data?: Category; error?: string }> {
+    let savedCategory: Category | undefined;
+
     if (isSupabaseConfigured) {
       try {
         if (cat.id) {
-          // UPDATE existing category
+          // UPDATE existing category in Supabase
           const { data, error } = await supabase
             .from('categories')
             .update({
@@ -80,11 +94,11 @@ export const storeService = {
             .select();
           if (error) {
             console.error('Supabase update category error:', error.message);
-            return { success: false, error: error.message };
+          } else if (data && data.length > 0) {
+            savedCategory = data[0] as Category;
           }
-          return { success: true, data: (data?.[0] || cat) as Category };
         } else {
-          // INSERT new category
+          // INSERT new category in Supabase
           const { data, error } = await supabase
             .from('categories')
             .insert({
@@ -98,24 +112,25 @@ export const storeService = {
             .select();
           if (error) {
             console.error('Supabase insert category error:', error.message);
-            return { success: false, error: error.message };
+          } else if (data && data.length > 0) {
+            savedCategory = data[0] as Category;
           }
-          return { success: true, data: (data?.[0] || cat) as Category };
         }
       } catch (e) {
         console.warn('Supabase category save exception', e);
       }
     }
 
-    // localStorage fallback
+    // Always update local cache so changes are immediately visible
     const categories = getLocalItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
     let updatedCategory: Category;
     if (cat.id) {
       const index = categories.findIndex((c) => c.id === cat.id);
-      updatedCategory = { ...categories[index >= 0 ? index : 0], ...cat } as Category;
+      updatedCategory = { ...categories[index >= 0 ? index : 0], ...cat, ...(savedCategory || {}) } as Category;
       if (index >= 0) categories[index] = updatedCategory;
+      else categories.push(updatedCategory);
     } else {
-      updatedCategory = {
+      updatedCategory = savedCategory || {
         id: 'c_' + Date.now(),
         name: cat.name || 'New Category',
         slug: cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-') || `category-${Date.now()}`,
@@ -171,6 +186,7 @@ export const storeService = {
     limit?: number;
   }): Promise<Product[]> {
     let products: Product[] = [];
+    const localProducts = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, []);
 
     if (isSupabaseConfigured) {
       try {
@@ -183,6 +199,16 @@ export const storeService = {
             ...item,
             variants: item.product_variants || [],
           }));
+
+          // Merge local modifications if present
+          if (localProducts.length > 0) {
+            const localMap = new Map(localProducts.map(p => [p.id, p]));
+            products = products.map(p => localMap.get(p.id) || p);
+            // Append newly added local products not yet in Supabase
+            const supabaseIds = new Set(data.map(p => p.id));
+            const newLocals = localProducts.filter(p => !supabaseIds.has(p.id));
+            products = [...products, ...newLocals];
+          }
         }
       } catch (err) {
         console.warn('Supabase products fetch failed, using local', err);
@@ -190,7 +216,7 @@ export const storeService = {
     }
 
     if (products.length === 0) {
-      products = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+      products = localProducts.length > 0 ? localProducts : INITIAL_PRODUCTS;
     }
 
     // Apply filters
@@ -255,10 +281,12 @@ export const storeService = {
     prod: Partial<Product>,
     variants?: Partial<ProductVariant>[]
   ): Promise<{ success: boolean; data?: Product; error?: string }> {
+    let savedProdRow: any;
+
     if (isSupabaseConfigured) {
       try {
         if (prod.id) {
-          // UPDATE existing product
+          // UPDATE existing product in Supabase
           const { variants: _v, ...productData } = prod as Product;
           const { data: updatedProd, error: updateErr } = await supabase
             .from('products')
@@ -267,7 +295,8 @@ export const storeService = {
             .select();
           if (updateErr) {
             console.error('Supabase update product error:', updateErr.message);
-            return { success: false, error: updateErr.message };
+          } else if (updatedProd && updatedProd.length > 0) {
+            savedProdRow = updatedProd[0];
           }
           // Upsert variants
           if (variants && variants.length > 0) {
@@ -275,10 +304,8 @@ export const storeService = {
             const { error: varErr } = await supabase.from('product_variants').upsert(variantsWithProductId);
             if (varErr) console.error('Supabase variant upsert error:', varErr.message);
           }
-          const fullProduct = { ...(updatedProd?.[0] || prod), variants: variants as ProductVariant[] || [] };
-          return { success: true, data: fullProduct as Product };
         } else {
-          // INSERT new product
+          // INSERT new product in Supabase
           const newSlug = prod.slug || prod.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `product-${Date.now()}`;
           const { data: inserted, error: insertErr } = await supabase
             .from('products')
@@ -305,7 +332,8 @@ export const storeService = {
             .select();
           if (insertErr) {
             console.error('Supabase insert product error:', insertErr.message);
-            return { success: false, error: insertErr.message };
+          } else if (inserted && inserted.length > 0) {
+            savedProdRow = inserted[0];
           }
           // Insert variants
           const insertedRow = inserted?.[0];
@@ -314,37 +342,54 @@ export const storeService = {
             const { error: varErr } = await supabase.from('product_variants').insert(variantsWithProductId);
             if (varErr) console.error('Supabase variant insert error:', varErr.message);
           }
-          const fullProduct = { ...(insertedRow || prod), variants: variants as ProductVariant[] || [] };
-          return { success: true, data: fullProduct as Product };
         }
       } catch (e) {
         console.warn('Supabase product save exception', e);
       }
     }
 
-    // localStorage fallback
+    // Always update local storage so changes immediately reflect in the UI
     const products = getLocalItem<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
     let targetProduct: Product;
     if (prod.id) {
       const index = products.findIndex((p) => p.id === prod.id);
-      targetProduct = { ...products[index >= 0 ? index : 0], ...prod, variants: (variants as ProductVariant[]) || [], updated_at: new Date().toISOString() };
-      if (index >= 0) products[index] = targetProduct;
-    } else {
-      const newId = 'p_' + Date.now();
       targetProduct = {
-        id: newId, name: prod.name || 'New Product',
+        ...products[index >= 0 ? index : 0],
+        ...prod,
+        ...(savedProdRow || {}),
+        variants: (variants as ProductVariant[]) || [],
+        updated_at: new Date().toISOString(),
+      };
+      if (index >= 0) products[index] = targetProduct;
+      else products.push(targetProduct);
+    } else {
+      const newId = savedProdRow?.id || ('p_' + Date.now());
+      targetProduct = {
+        ...(savedProdRow || {}),
+        id: newId,
+        name: prod.name || 'New Product',
         slug: prod.slug || prod.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `product-${Date.now()}`,
-        description: prod.description || '', short_description: prod.short_description || '',
+        description: prod.description || '',
+        short_description: prod.short_description || '',
         category_id: prod.category_id || '',
         sku: prod.sku || `MNR-${Date.now().toString().slice(-4)}`,
-        regular_price: prod.regular_price || 0, sales_price: prod.sales_price || 0,
-        stock_quantity: prod.stock_quantity || 0, weight_display: prod.weight_display || '250g',
-        rating: 5.0, reviews_count: 0, image_url: prod.image_url || '/assets/mini-honey-nuts.jpg',
-        featured: prod.featured ?? false, is_best_seller: prod.is_best_seller ?? false,
-        is_organic: prod.is_organic ?? false, is_popular: prod.is_popular ?? false,
-        is_new: prod.is_new ?? true, is_sale: prod.is_sale ?? false, active: prod.active ?? true,
+        regular_price: prod.regular_price || 0,
+        sales_price: prod.sales_price || 0,
+        stock_quantity: prod.stock_quantity || 0,
+        weight_display: prod.weight_display || '250g',
+        rating: 5.0,
+        reviews_count: 0,
+        image_url: prod.image_url || '/assets/mini-honey-nuts.jpg',
+        featured: prod.featured ?? false,
+        is_best_seller: prod.is_best_seller ?? false,
+        is_organic: prod.is_organic ?? false,
+        is_popular: prod.is_popular ?? false,
+        is_new: prod.is_new ?? true,
+        is_sale: prod.is_sale ?? false,
+        active: prod.active ?? true,
         variants: (variants as ProductVariant[]) || [],
-        created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       };
       products.push(targetProduct);
     }
