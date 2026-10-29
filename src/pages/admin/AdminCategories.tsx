@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit, Trash2, X, AlertCircle, CheckCircle, Layers } from 'lucide-react';
+import { Plus, Edit, Trash2, X, AlertCircle, CheckCircle, Layers, Upload } from 'lucide-react';
 import { storeService } from '../../services/storeService';
 import { Category, Product } from '../../types';
 
@@ -60,6 +60,50 @@ export const AdminCategories: React.FC = () => {
     setActive(cat.active);
     setErrorMessage(null);
     setIsModalOpen(true);
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image file is too large. Please select an image under 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const maxDimension = 800;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+          setImageUrl(compressedDataUrl);
+        } else {
+          setImageUrl(event.target?.result as string);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleSaveCategory = async (e: React.FormEvent) => {
@@ -262,14 +306,43 @@ export const AdminCategories: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-chocolate mb-1">Image URL</label>
-                <input
-                  type="text"
-                  required
-                  value={imageUrl}
-                  onChange={(e) => setImageUrl(e.target.value)}
-                  className="w-full px-3 py-2 bg-cream-50 border border-amber/20 rounded-xl font-mono"
-                />
+                <label className="block font-bold text-chocolate mb-1">Category Image (Photo or URL)</label>
+                <div className="flex flex-col sm:flex-row gap-3 items-start">
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt="Preview"
+                      className="w-14 h-14 rounded-xl object-cover border-2 border-amber/30 flex-shrink-0 shadow-xs bg-cream-50"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-cream-100 border border-dashed border-amber/40 flex items-center justify-center text-chocolate/40 text-[10px] flex-shrink-0">
+                      No Image
+                    </div>
+                  )}
+                  <div className="flex-1 w-full space-y-2">
+                    <input
+                      type="text"
+                      required
+                      value={imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      placeholder="https://... or /assets/..."
+                      className="w-full px-3 py-2 bg-cream-50 border border-amber/20 rounded-xl font-mono text-xs"
+                    />
+                    <div className="flex items-center gap-2">
+                      <label className="px-3 py-1.5 bg-amber/15 hover:bg-amber/25 text-chocolate font-bold rounded-lg text-xs cursor-pointer border border-amber/30 transition-colors inline-flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Upload Photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                      <span className="text-[10px] text-chocolate/50">Auto-compressed</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4 items-center">

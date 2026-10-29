@@ -16,6 +16,24 @@ const STORAGE_KEYS = {
 };
 
 // Helper for local state
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function isValidUUID(id?: string): boolean {
+  return Boolean(id && UUID_REGEX.test(id));
+}
+
+export function ensureUUID(id?: string): string {
+  if (isValidUUID(id)) return id!;
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 function getLocalItem<T>(key: string, defaultVal: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -286,11 +304,32 @@ export const storeService = {
     if (isSupabaseConfigured) {
       try {
         if (prod.id) {
-          // UPDATE existing product in Supabase
-          const { variants: _v, ...productData } = prod as Product;
+          // UPDATE existing product in Supabase - strictly whitelist columns to prevent Postgres schema errors
+          const cleanProductData: Record<string, any> = {
+            updated_at: new Date().toISOString(),
+          };
+          if (prod.name !== undefined) cleanProductData.name = prod.name;
+          if (prod.slug !== undefined) cleanProductData.slug = prod.slug;
+          if (prod.description !== undefined) cleanProductData.description = prod.description;
+          if (prod.short_description !== undefined) cleanProductData.short_description = prod.short_description;
+          if (prod.category_id !== undefined) cleanProductData.category_id = prod.category_id;
+          if (prod.sku !== undefined) cleanProductData.sku = prod.sku;
+          if (prod.regular_price !== undefined) cleanProductData.regular_price = Number(prod.regular_price);
+          if (prod.sales_price !== undefined) cleanProductData.sales_price = Number(prod.sales_price);
+          if (prod.stock_quantity !== undefined) cleanProductData.stock_quantity = Number(prod.stock_quantity);
+          if (prod.weight_display !== undefined) cleanProductData.weight_display = prod.weight_display;
+          if (prod.image_url !== undefined) cleanProductData.image_url = prod.image_url;
+          if (prod.featured !== undefined) cleanProductData.featured = Boolean(prod.featured);
+          if (prod.is_best_seller !== undefined) cleanProductData.is_best_seller = Boolean(prod.is_best_seller);
+          if (prod.is_organic !== undefined) cleanProductData.is_organic = Boolean(prod.is_organic);
+          if (prod.is_popular !== undefined) cleanProductData.is_popular = Boolean(prod.is_popular);
+          if (prod.is_new !== undefined) cleanProductData.is_new = Boolean(prod.is_new);
+          if (prod.is_sale !== undefined) cleanProductData.is_sale = Boolean(prod.is_sale);
+          if (prod.active !== undefined) cleanProductData.active = Boolean(prod.active);
+
           const { data: updatedProd, error: updateErr } = await supabase
             .from('products')
-            .update({ ...productData, updated_at: new Date().toISOString() })
+            .update(cleanProductData)
             .eq('id', prod.id)
             .select();
           if (updateErr) {
@@ -298,9 +337,18 @@ export const storeService = {
           } else if (updatedProd && updatedProd.length > 0) {
             savedProdRow = updatedProd[0];
           }
-          // Upsert variants
+          // Upsert variants with strictly sanitized UUIDs and schema columns
           if (variants && variants.length > 0) {
-            const variantsWithProductId = variants.map(v => ({ ...v, product_id: prod.id }));
+            const variantsWithProductId = variants.map(v => ({
+              id: ensureUUID(v.id),
+              product_id: prod.id,
+              sku: v.sku || `${prod.sku || 'MNR'}-${Math.floor(Math.random() * 1000)}`,
+              attributes: v.attributes || {},
+              regular_price: Number(v.regular_price) || 0,
+              sales_price: Number(v.sales_price) || 0,
+              stock_quantity: Number(v.stock_quantity) || 0,
+              active: v.active ?? true,
+            }));
             const { error: varErr } = await supabase.from('product_variants').upsert(variantsWithProductId);
             if (varErr) console.error('Supabase variant upsert error:', varErr.message);
           }
@@ -312,21 +360,21 @@ export const storeService = {
             .insert({
               name: prod.name,
               slug: newSlug,
-              description: prod.description,
-              short_description: prod.short_description,
+              description: prod.description || '',
+              short_description: prod.short_description || '',
               category_id: prod.category_id,
               sku: prod.sku || `MNR-${Date.now().toString().slice(-4)}`,
-              regular_price: prod.regular_price || 0,
-              sales_price: prod.sales_price || 0,
-              stock_quantity: prod.stock_quantity || 0,
-              weight_display: prod.weight_display,
-              image_url: prod.image_url,
-              featured: prod.featured ?? false,
-              is_best_seller: prod.is_best_seller ?? false,
-              is_organic: prod.is_organic ?? false,
-              is_popular: prod.is_popular ?? false,
-              is_new: prod.is_new ?? true,
-              is_sale: prod.is_sale ?? false,
+              regular_price: Number(prod.regular_price) || 0,
+              sales_price: Number(prod.sales_price) || 0,
+              stock_quantity: Number(prod.stock_quantity) || 0,
+              weight_display: prod.weight_display || '250g',
+              image_url: prod.image_url || '/assets/mini-honey-nuts.jpg',
+              featured: Boolean(prod.featured),
+              is_best_seller: Boolean(prod.is_best_seller),
+              is_organic: Boolean(prod.is_organic),
+              is_popular: Boolean(prod.is_popular),
+              is_new: Boolean(prod.is_new ?? true),
+              is_sale: Boolean(prod.is_sale),
               active: prod.active ?? true,
             })
             .select();
@@ -335,10 +383,19 @@ export const storeService = {
           } else if (inserted && inserted.length > 0) {
             savedProdRow = inserted[0];
           }
-          // Insert variants
+          // Insert variants with valid UUIDs
           const insertedRow = inserted?.[0];
           if (variants && variants.length > 0 && insertedRow) {
-            const variantsWithProductId = variants.map(v => ({ ...v, product_id: insertedRow.id }));
+            const variantsWithProductId = variants.map(v => ({
+              id: ensureUUID(v.id),
+              product_id: insertedRow.id,
+              sku: v.sku || `${insertedRow.sku || 'MNR'}-${Math.floor(Math.random() * 1000)}`,
+              attributes: v.attributes || {},
+              regular_price: Number(v.regular_price) || 0,
+              sales_price: Number(v.sales_price) || 0,
+              stock_quantity: Number(v.stock_quantity) || 0,
+              active: v.active ?? true,
+            }));
             const { error: varErr } = await supabase.from('product_variants').insert(variantsWithProductId);
             if (varErr) console.error('Supabase variant insert error:', varErr.message);
           }
@@ -500,9 +557,19 @@ export const storeService = {
     if (isSupabaseConfigured) {
       try {
         if (slide.id) {
+          const cleanSlide: Record<string, any> = { updated_at: new Date().toISOString() };
+          if (slide.headline !== undefined) cleanSlide.headline = slide.headline;
+          if (slide.description !== undefined) cleanSlide.description = slide.description;
+          if (slide.image_url !== undefined) cleanSlide.image_url = slide.image_url;
+          if (slide.badge !== undefined) cleanSlide.badge = slide.badge;
+          if (slide.cta_text !== undefined) cleanSlide.cta_text = slide.cta_text;
+          if (slide.cta_url !== undefined) cleanSlide.cta_url = slide.cta_url;
+          if (slide.display_order !== undefined) cleanSlide.display_order = slide.display_order;
+          if (slide.active !== undefined) cleanSlide.active = slide.active;
+
           const { data, error } = await supabase
             .from('hero_slides')
-            .update({ ...slide, updated_at: new Date().toISOString() })
+            .update(cleanSlide)
             .eq('id', slide.id)
             .select();
           if (error) return { success: false, error: error.message };
@@ -591,7 +658,7 @@ export const storeService = {
           key: 'general',
           value: merged,
           updated_at: new Date().toISOString(),
-        });
+        }, { onConflict: 'key' });
         if (error) {
           console.error('Supabase settings save error:', error.message);
           return { success: false, error: error.message };

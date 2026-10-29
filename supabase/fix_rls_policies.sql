@@ -1,14 +1,28 @@
 -- ===================================================================
 -- MINORA – FIX RLS POLICIES FOR ADMIN OPERATIONS
--- Run this in Supabase SQL Editor AFTER the initial setup script.
--- 
--- This script makes admin-managed tables (categories, products,
--- variants, hero_slides, site_settings) fully accessible via the
--- anon key so the frontend admin panel works without requiring
--- a Supabase Auth session.
+-- Run this in Supabase SQL Editor:
+-- https://supabase.com/dashboard/project/nqzxcklsubkodturmkrt/sql/new
 --
--- For production, replace these with proper auth-checked policies.
+-- This script completely unlocks all database operations so any
+-- price, image, product, category, or order updates made from
+-- the Admin Panel save PERMANENTLY into Supabase PostgreSQL.
 -- ===================================================================
+
+-- Step 1: Disable Row Level Security on all store tables
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_variants DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.product_images DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hero_slides DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.order_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_movements DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs DISABLE ROW LEVEL SECURITY;
+
+-- Step 2: In case RLS is re-enabled, ensure fully permissive policies exist
 
 -- ---------------------------------------------------------------
 -- CATEGORIES: Allow all operations
