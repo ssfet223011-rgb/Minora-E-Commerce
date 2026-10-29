@@ -51,6 +51,25 @@ function setLocalItem<T>(key: string, val: T): void {
   }
 }
 
+// Helper to call backend administrative serverless endpoint (bypasses RLS with full server privileges)
+async function callAdminApi<T>(action: string, payload: any): Promise<{ success: boolean; data?: T; error?: string }> {
+  try {
+    const res = await fetch('/api/admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload }),
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success) return { success: true, data: json.data };
+      if (json.error) return { success: false, error: json.error };
+    }
+  } catch (err: any) {
+    console.warn(`Admin API call for "${action}" fallback:`, err?.message);
+  }
+  return { success: false };
+}
+
 export const storeService = {
   // CATEGORIES
   async getCategories(): Promise<Category[]> {
@@ -82,7 +101,22 @@ export const storeService = {
   async saveCategory(cat: Partial<Category>): Promise<{ success: boolean; data?: Category; error?: string }> {
     let savedCategory: Category | undefined;
 
-    if (isSupabaseConfigured) {
+    const cleanCat: any = {
+      name: cat.name,
+      slug: cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-'),
+      description: cat.description,
+      image_url: cat.image_url,
+      display_order: cat.display_order,
+      active: cat.active ?? true,
+    };
+    if (cat.id) cleanCat.id = cat.id;
+
+    // 1. Try serverless backend administrative endpoint
+    const apiRes = await callAdminApi<Category>('save_category', { category: cleanCat });
+    if (apiRes.success && apiRes.data) {
+      savedCategory = apiRes.data;
+    } else if (isSupabaseConfigured) {
+      // 2. Direct Supabase client fallback
       try {
         if (cat.id) {
           // UPDATE existing category in Supabase
@@ -108,14 +142,7 @@ export const storeService = {
           // INSERT new category in Supabase
           const { data, error } = await supabase
             .from('categories')
-            .insert({
-              name: cat.name,
-              slug: cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-'),
-              description: cat.description,
-              image_url: cat.image_url,
-              display_order: cat.display_order,
-              active: cat.active ?? true,
-            })
+            .insert(cleanCat)
             .select();
           if (error) {
             console.error('Supabase insert category error:', error.message);
@@ -160,6 +187,14 @@ export const storeService = {
         success: false,
         error: 'Cannot delete category because active products belong to it. Please reassign or delete products first.',
       };
+    }
+
+    // Try serverless backend administrative endpoint
+    const apiRes = await callAdminApi('delete_category', { id });
+    if (apiRes.success) {
+      const categories = getLocalItem<Category[]>(STORAGE_KEYS.CATEGORIES, INITIAL_CATEGORIES);
+      setLocalItem(STORAGE_KEYS.CATEGORIES, categories.filter((c) => c.id !== id));
+      return { success: true };
     }
 
     if (isSupabaseConfigured) {
@@ -281,32 +316,51 @@ export const storeService = {
   ): Promise<{ success: boolean; data?: Product; error?: string }> {
     let savedProdRow: any;
 
-    if (isSupabaseConfigured) {
+    const cleanProductData: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (prod.name !== undefined) cleanProductData.name = prod.name;
+    if (prod.slug !== undefined) cleanProductData.slug = prod.slug;
+    if (prod.description !== undefined) cleanProductData.description = prod.description;
+    if (prod.short_description !== undefined) cleanProductData.short_description = prod.short_description;
+    if (prod.category_id !== undefined) cleanProductData.category_id = prod.category_id;
+    if (prod.sku !== undefined) cleanProductData.sku = prod.sku;
+    if (prod.regular_price !== undefined) cleanProductData.regular_price = Number(prod.regular_price);
+    if (prod.sales_price !== undefined) cleanProductData.sales_price = Number(prod.sales_price);
+    if (prod.stock_quantity !== undefined) cleanProductData.stock_quantity = Number(prod.stock_quantity);
+    if (prod.weight_display !== undefined) cleanProductData.weight_display = prod.weight_display;
+    if (prod.image_url !== undefined) cleanProductData.image_url = prod.image_url;
+    if (prod.featured !== undefined) cleanProductData.featured = Boolean(prod.featured);
+    if (prod.is_best_seller !== undefined) cleanProductData.is_best_seller = Boolean(prod.is_best_seller);
+    if (prod.is_organic !== undefined) cleanProductData.is_organic = Boolean(prod.is_organic);
+    if (prod.is_popular !== undefined) cleanProductData.is_popular = Boolean(prod.is_popular);
+    if (prod.is_new !== undefined) cleanProductData.is_new = Boolean(prod.is_new);
+    if (prod.is_sale !== undefined) cleanProductData.is_sale = Boolean(prod.is_sale);
+    if (prod.active !== undefined) cleanProductData.active = Boolean(prod.active);
+    if (prod.id) cleanProductData.id = prod.id;
+
+    const cleanVariants = variants ? variants.map(v => ({
+      id: ensureUUID(v.id),
+      sku: v.sku,
+      attributes: v.attributes || {},
+      regular_price: Number(v.regular_price) || 0,
+      sales_price: Number(v.sales_price) || 0,
+      stock_quantity: Number(v.stock_quantity) || 0,
+      active: v.active ?? true,
+    })) : [];
+
+    // 1. Try serverless backend administrative endpoint (automatic server sync, bypasses RLS)
+    const apiRes = await callAdminApi<Product>('save_product', {
+      product: cleanProductData,
+      variants: cleanVariants,
+    });
+
+    if (apiRes.success && apiRes.data) {
+      savedProdRow = apiRes.data;
+    } else if (isSupabaseConfigured) {
+      // 2. Direct Supabase client fallback
       try {
         if (prod.id) {
-          // UPDATE existing product in Supabase - strictly whitelist columns to prevent Postgres schema errors
-          const cleanProductData: Record<string, any> = {
-            updated_at: new Date().toISOString(),
-          };
-          if (prod.name !== undefined) cleanProductData.name = prod.name;
-          if (prod.slug !== undefined) cleanProductData.slug = prod.slug;
-          if (prod.description !== undefined) cleanProductData.description = prod.description;
-          if (prod.short_description !== undefined) cleanProductData.short_description = prod.short_description;
-          if (prod.category_id !== undefined) cleanProductData.category_id = prod.category_id;
-          if (prod.sku !== undefined) cleanProductData.sku = prod.sku;
-          if (prod.regular_price !== undefined) cleanProductData.regular_price = Number(prod.regular_price);
-          if (prod.sales_price !== undefined) cleanProductData.sales_price = Number(prod.sales_price);
-          if (prod.stock_quantity !== undefined) cleanProductData.stock_quantity = Number(prod.stock_quantity);
-          if (prod.weight_display !== undefined) cleanProductData.weight_display = prod.weight_display;
-          if (prod.image_url !== undefined) cleanProductData.image_url = prod.image_url;
-          if (prod.featured !== undefined) cleanProductData.featured = Boolean(prod.featured);
-          if (prod.is_best_seller !== undefined) cleanProductData.is_best_seller = Boolean(prod.is_best_seller);
-          if (prod.is_organic !== undefined) cleanProductData.is_organic = Boolean(prod.is_organic);
-          if (prod.is_popular !== undefined) cleanProductData.is_popular = Boolean(prod.is_popular);
-          if (prod.is_new !== undefined) cleanProductData.is_new = Boolean(prod.is_new);
-          if (prod.is_sale !== undefined) cleanProductData.is_sale = Boolean(prod.is_sale);
-          if (prod.active !== undefined) cleanProductData.active = Boolean(prod.active);
-
           const { data: updatedProd, error: updateErr } = await supabase
             .from('products')
             .update(cleanProductData)
@@ -317,66 +371,26 @@ export const storeService = {
           } else if (updatedProd && updatedProd.length > 0) {
             savedProdRow = updatedProd[0];
           }
-          // Upsert variants with strictly sanitized UUIDs and schema columns
-          if (variants && variants.length > 0) {
-            const variantsWithProductId = variants.map(v => ({
-              id: ensureUUID(v.id),
-              product_id: prod.id,
-              sku: v.sku || `${prod.sku || 'MNR'}-${Math.floor(Math.random() * 1000)}`,
-              attributes: v.attributes || {},
-              regular_price: Number(v.regular_price) || 0,
-              sales_price: Number(v.sales_price) || 0,
-              stock_quantity: Number(v.stock_quantity) || 0,
-              active: v.active ?? true,
-            }));
-            const { error: varErr } = await supabase.from('product_variants').upsert(variantsWithProductId);
+          if (cleanVariants.length > 0) {
+            const varsWithPid = cleanVariants.map(v => ({ ...v, product_id: prod.id }));
+            const { error: varErr } = await supabase.from('product_variants').upsert(varsWithPid);
             if (varErr) console.error('Supabase variant upsert error:', varErr.message);
           }
         } else {
-          // INSERT new product in Supabase
           const newSlug = prod.slug || prod.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-') || `product-${Date.now()}`;
           const { data: inserted, error: insertErr } = await supabase
             .from('products')
-            .insert({
-              name: prod.name,
-              slug: newSlug,
-              description: prod.description || '',
-              short_description: prod.short_description || '',
-              category_id: prod.category_id,
-              sku: prod.sku || `MNR-${Date.now().toString().slice(-4)}`,
-              regular_price: Number(prod.regular_price) || 0,
-              sales_price: Number(prod.sales_price) || 0,
-              stock_quantity: Number(prod.stock_quantity) || 0,
-              weight_display: prod.weight_display || '250g',
-              image_url: prod.image_url || '/assets/mini-honey-nuts.jpg',
-              featured: Boolean(prod.featured),
-              is_best_seller: Boolean(prod.is_best_seller),
-              is_organic: Boolean(prod.is_organic),
-              is_popular: Boolean(prod.is_popular),
-              is_new: Boolean(prod.is_new ?? true),
-              is_sale: Boolean(prod.is_sale),
-              active: prod.active ?? true,
-            })
+            .insert({ ...cleanProductData, slug: newSlug })
             .select();
           if (insertErr) {
             console.error('Supabase insert product error:', insertErr.message);
           } else if (inserted && inserted.length > 0) {
             savedProdRow = inserted[0];
           }
-          // Insert variants with valid UUIDs
           const insertedRow = inserted?.[0];
-          if (variants && variants.length > 0 && insertedRow) {
-            const variantsWithProductId = variants.map(v => ({
-              id: ensureUUID(v.id),
-              product_id: insertedRow.id,
-              sku: v.sku || `${insertedRow.sku || 'MNR'}-${Math.floor(Math.random() * 1000)}`,
-              attributes: v.attributes || {},
-              regular_price: Number(v.regular_price) || 0,
-              sales_price: Number(v.sales_price) || 0,
-              stock_quantity: Number(v.stock_quantity) || 0,
-              active: v.active ?? true,
-            }));
-            const { error: varErr } = await supabase.from('product_variants').insert(variantsWithProductId);
+          if (cleanVariants.length > 0 && insertedRow) {
+            const varsWithPid = cleanVariants.map(v => ({ ...v, product_id: insertedRow.id }));
+            const { error: varErr } = await supabase.from('product_variants').insert(varsWithPid);
             if (varErr) console.error('Supabase variant insert error:', varErr.message);
           }
         }
@@ -438,6 +452,10 @@ export const storeService = {
     const products = await this.getProducts();
     const filtered = products.filter((p) => p.id !== id);
     setLocalItem(STORAGE_KEYS.PRODUCTS, filtered);
+
+    // Try serverless backend administrative endpoint
+    const apiRes = await callAdminApi('delete_product', { id });
+    if (apiRes.success) return true;
 
     if (isSupabaseConfigured) {
       try {
@@ -631,6 +649,13 @@ export const storeService = {
       paymentSettings: { ...current.paymentSettings, ...(settings.paymentSettings || {}) },
       policies: { ...current.policies, ...(settings.policies || {}) },
     };
+
+    // Try serverless backend administrative endpoint
+    const apiRes = await callAdminApi<SiteSettings>('save_settings', { settings: merged });
+    if (apiRes.success && apiRes.data) {
+      setLocalItem(STORAGE_KEYS.SETTINGS, apiRes.data);
+      return { success: true, data: apiRes.data };
+    }
 
     if (isSupabaseConfigured) {
       try {
