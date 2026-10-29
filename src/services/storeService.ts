@@ -63,17 +63,6 @@ export const storeService = {
           .select('*')
           .order('display_order', { ascending: true });
         if (!error && data && data.length > 0) {
-          // If we have local overrides, merge them
-          if (localCategories.length > 0) {
-            const localMap = new Map(localCategories.map(c => [c.id, c]));
-            const merged = data.map(cat => localMap.get(cat.id) || cat);
-            // Also append any newly created local categories not in Supabase yet
-            const supabaseIds = new Set(data.map(c => c.id));
-            const newLocals = localCategories.filter(c => !supabaseIds.has(c.id));
-            const fullList = [...merged, ...newLocals];
-            setLocalItem(STORAGE_KEYS.CATEGORIES, fullList);
-            return fullList;
-          }
           setLocalItem(STORAGE_KEYS.CATEGORIES, data);
           return data;
         }
@@ -217,16 +206,7 @@ export const storeService = {
             ...item,
             variants: item.product_variants || [],
           }));
-
-          // Merge local modifications if present
-          if (localProducts.length > 0) {
-            const localMap = new Map(localProducts.map(p => [p.id, p]));
-            products = products.map(p => localMap.get(p.id) || p);
-            // Append newly added local products not yet in Supabase
-            const supabaseIds = new Set(data.map(p => p.id));
-            const newLocals = localProducts.filter(p => !supabaseIds.has(p.id));
-            products = [...products, ...newLocals];
-          }
+          setLocalItem(STORAGE_KEYS.PRODUCTS, products);
         }
       } catch (err) {
         console.warn('Supabase products fetch failed, using local', err);
