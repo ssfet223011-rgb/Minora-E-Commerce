@@ -39,7 +39,7 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'c5',
-    name: 'Superfoods',
+    name: 'Medicine',
     slug: 'superfoods',
     description: 'Boost Your Health',
     image_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?auto=format&fit=crop&w=300&q=80',
@@ -48,20 +48,11 @@ export const INITIAL_CATEGORIES: Category[] = [
   },
   {
     id: 'c6',
-    name: 'Trail Mix',
+    name: 'Chocolates',
     slug: 'trail-mix',
     description: 'On-the-Go Nutrition',
     image_url: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&w=300&q=80',
     display_order: 6,
-    active: true,
-  },
-  {
-    id: 'c7',
-    name: 'Organic',
-    slug: 'organic',
-    description: 'Pure & Clean',
-    image_url: 'https://images.unsplash.com/photo-1608797178974-15b35a61dd75?auto=format&fit=crop&w=300&q=80',
-    display_order: 7,
     active: true,
   },
   {
@@ -70,7 +61,7 @@ export const INITIAL_CATEGORIES: Category[] = [
     slug: 'honey-more',
     description: "Nature's Goodness",
     image_url: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=300&q=80',
-    display_order: 8,
+    display_order: 7,
     active: true,
   },
 ];
@@ -86,8 +77,8 @@ export const INITIAL_PRODUCTS: Product[] = [
     category_id: 'c6',
     category_name: 'Trail Mix',
     sku: 'MNR-HN-001',
-    regular_price: 350,
-    sales_price: 290,
+    regular_price: 20,
+    sales_price: 20,
     stock_quantity: 45,
     weight_display: '100g - 1kg',
     rating: 5.0,
@@ -252,7 +243,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'p4',
-    name: 'Premium Dates',
+    name: 'Vegetables',
     slug: 'premium-dates',
     description:
       'Soft and naturally sweet royal dates imported from Medina. Free from synthetic glucose syrups or coatings, naturally sweet and rich in essential potassium and minerals.',
@@ -298,7 +289,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'p5',
-    name: 'Trail Mix',
+    name: 'Chocolates',
     slug: 'trail-mix',
     description:
       'Our vibrant high-energy blend of toasted pumpkin seeds, dried cranberries, golden raisins, roasted cashews, and almonds. The cleanest snack for sustained energy throughout your day.',
@@ -344,7 +335,7 @@ export const INITIAL_PRODUCTS: Product[] = [
   },
   {
     id: 'p6',
-    name: 'Sundarban Raw Honey',
+    name: 'Watermelon',
     slug: 'sundarban-raw-honey',
     description:
       'Pure, 100% authentic unheated wild mangrove floral honey extracted traditionally by local Mouwals of the Sundarbans forest. Infused with natural wild bee propolis and natural floral pollen.',

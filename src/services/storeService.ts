@@ -197,7 +197,7 @@ export const storeService = {
 
     if (isSupabaseConfigured) {
       try {
-        let query = supabase.from('products').select('*, product_variants(*)');
+        let query = supabase.from('products').select('*, product_variants(*)').order('id', { ascending: true });
         if (filters?.categoryId) query = query.eq('category_id', filters.categoryId);
         if (filters?.featured) query = query.eq('featured', true);
         const { data, error } = await query;
